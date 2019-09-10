@@ -84,7 +84,7 @@ class GLBEncoder:
 			glb_out.extend(' ')
 
 		# Write the body
-		for i in xrange(0, len(self.body.body_parts), 2):
+		for i in range(0, len(self.body.body_parts), 2):
 			offset = self.body.body_parts[i]
 			contents = self.body.body_parts[i + 1]
 			if offset + body_offset != len(glb_out):
@@ -101,7 +101,7 @@ def main():
 	parser.add_argument("-e", "--embed", action="store_true", \
 						help="Embed textures or shares into binary GLTF file")
 	parser.add_argument("-o", "--output", required=False, default=None,
-	                    help="Optional output path (defaults to the path of the input file")
+						help="Optional output path (defaults to the path of the input file")
 	parser.add_argument("filename")
 	args = parser.parse_args()
 
@@ -124,10 +124,7 @@ def main():
 	body_encoder = BodyEncoder(containing_dir = os.path.dirname(args.filename))
 
 	# Let GLTF parser know that it is using the Binary GLTF extension
-	try:
-		scene["extensionsUsed"].append(BINARY_EXTENSION)
-	except (KeyError, TypeError):
-		scene["extensionsUsed"] = [BINARY_EXTENSION]
+	scene["extensionsUsed"].setdefault([]).append(BINARY_EXTENSION)
 
 	# Iterate the buffers in the scene:
 	for buf_id, buf in scene["buffers"].iteritems():
@@ -135,17 +132,9 @@ def main():
 		if buf_type and buf_type != 'arraybuffer':
 			raise TypeError("Buffer type %s not supported: %s" % (buf_type, buf_id))
 
-		try:
-			length = buf["byteLength"]
-		except:
-			length = None
-
+		length = buf.get("byteLength")
 		offset, length = body_encoder.addToBody(buf["uri"], length)
-		try:
-			buf["extras"]
-		except KeyError:
-			buf["extras"] = {}
-		buf["extras"]["byteOffset"] = offset
+		buf.setdefault("extras", {})["byteOffset"] = offset
 
 	# Iterate over the bufferViews to
 	# move buffers into the single GLB buffer body
@@ -157,10 +146,9 @@ def main():
 			raise KeyError("Buffer ID reference not found: %s" % (buf_id))
 
 		scene["bufferViews"][bufview_id]["buffer"] = BINARY_BUFFER
-		try:
-			scene["bufferViews"][bufview_id]["byteOffset"] += referenced_buf["extras"]["byteOffset"]
-		except KeyError:
-			scene["bufferViews"][bufview_id]["byteOffset"] = referenced_buf["extras"]["byteOffset"]
+
+		scene["bufferViews"][bufview_id].setdefault("byteOffset", 0)
+		scene["bufferViews"][bufview_id]["byteOffset"] += referenced_buf["extras"]["byteOffset"]
 
 	# Iterate over the shaders
 	if 'shaders' in embed and 'shaders' in scene:
@@ -204,7 +192,7 @@ def main():
 	new_scene_str = bytearray(json.dumps(scene, separators=(',', ':'), sort_keys=True))
 	encoder = GLBEncoder(new_scene_str, body_encoder)
 
-	fname_out = os.path.splitext(os.path.basename(args.filename))[0] + '.glb' + ext
+	fname_out = os.path.splitext(os.path.basename(args.filename))[0] + '.glb'
 	if None != args.output:
 		if "" == os.path.basename(args.output):
 			fname_out = os.path.join(fname_out, fname_out)
