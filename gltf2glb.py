@@ -13,8 +13,6 @@ import json
 import re
 import struct
 
-import b3dm, i3dm
-
 EMBED_ARR = ['textures', 'shaders']
 BASE64_REGEXP = re.compile(r'^data:.*?;base64,')
 BINARY_EXTENSION = 'KHR_binary_glTF'
@@ -41,7 +39,7 @@ class BodyEncoder:
 		# Fix length variable and buffer length
 		length = min(length, len(buf)) if length is not None else len(buf)
 		buf = buf[0:length]
-	
+
 		# Handle the buffer
 		offset = self.body_length
 		self.body_parts.append(offset)
@@ -64,14 +62,14 @@ class GLBEncoder:
 	def exportString(self):
 		""" Export the GLB data"""
 		scene_len = len(self.header)
-	
+
 		# As body is 4-byte-aligned, the scene length must be padded to a multiple of 4
 		padded_scene_len = (scene_len + 3) & ~3
-	
+
 		# Header is 20 bytes
 		body_offset = padded_scene_len + 20
 		file_len = body_offset + self.body.body_length
-	
+
 		# Write the header
 		glb_out = bytearray()
 		glb_out.extend(struct.pack('>I', 0x676C5446))		# magic number: "glTF"
@@ -84,7 +82,7 @@ class GLBEncoder:
 		# Add padding
 		while len(glb_out) < body_offset:
 			glb_out.extend(' ')
-	
+
 		# Write the body
 		for i in xrange(0, len(self.body.body_parts), 2):
 			offset = self.body.body_parts[i]
@@ -92,22 +90,16 @@ class GLBEncoder:
 			if offset + body_offset != len(glb_out):
 				raise IndexError
 			glb_out.extend(contents)
-	
+
 		return glb_out
 
 def main():
-	""" Convert GLTF to GLB, with optional additional I3DM or B3DM encoding"""
+	""" Convert GLTF to GLB"""
 
 	# Parse options and get results
 	parser = argparse.ArgumentParser(description='Converts GLTF to GLB')
 	parser.add_argument("-e", "--embed", action="store_true", \
 						help="Embed textures or shares into binary GLTF file")
-	parser.add_argument("-c", "--cesium", action="store_true", \
-						help="sets the old body buffer name for compatibility with Cesium [UNNECESSARY - DEPRECATED]")
-	parser.add_argument("-i", "--i3dm", type=str, \
-	                    help="Export i3dm, with required path to input JSON instance table data. Supports only embedded GLTFs")
-	parser.add_argument("-b", "--b3dm", type=str, \
-	                    help="Export b3dm, with optional path to input JSON batch table data")
 	parser.add_argument("-o", "--output", required=False, default=None,
 	                    help="Optional output path (defaults to the path of the input file")
 	parser.add_argument("filename")
@@ -211,15 +203,8 @@ def main():
 
 	new_scene_str = bytearray(json.dumps(scene, separators=(',', ':'), sort_keys=True))
 	encoder = GLBEncoder(new_scene_str, body_encoder)
-	if args.b3dm != None:
-		ext = 'b3dm'
-	elif args.i3dm != None:
-		ext = 'i3dm'
-	else:
-		ext = 'glb'
-	#print("Exporting %s" % (ext))
 
-	fname_out = os.path.splitext(os.path.basename(args.filename))[0] + '.' + ext
+	fname_out = os.path.splitext(os.path.basename(args.filename))[0] + '.glb' + ext
 	if None != args.output:
 		if "" == os.path.basename(args.output):
 			fname_out = os.path.join(fname_out, fname_out)
@@ -228,32 +213,7 @@ def main():
 	else:
 		fname_out = os.path.join(os.path.dirname(args.filename), fname_out)
 
-	if args.b3dm != None:
-		glb = encoder.exportString()
-		b3dm_encoder = b3dm.B3DM()
-		if len(args.b3dm):
-			with open(args.b3dm, 'r') as f:
-				b3dm_json = json.loads(f.read())
-			b3dm_encoder.loadJSONBatch(b3dm_json, False)
-
-		with open(fname_out, 'w') as f:
-			f.write(b3dm_encoder.writeBinary(glb))
-
-	elif args.i3dm != None:
-		glb = encoder.exportString()
-		i3dm_encoder = i3dm.I3DM()
-		if not(len(args.i3dm)):
-			raise ValueError("-i/--i3dm requires a JSON instance table")
-		else:
-			with open(args.i3dm, 'r') as f:
-				i3dm_json = json.loads(f.read())
-			i3dm_encoder.loadJSONInstances(i3dm_json)
-
-		with open(fname_out, 'w') as f:
-			f.write(i3dm_encoder.writeBinary(glb, True))		# Second arg: embed gltf
-
-	else:
-		encoder.export(fname_out)
+	encoder.export(fname_out)
 
 if __name__ == "__main__":
 	main()
